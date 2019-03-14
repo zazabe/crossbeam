@@ -374,11 +374,11 @@ impl<T> Sender<T> {
     /// drop(r);
     /// assert_eq!(s.try_send(3), Err(TrySendError::Disconnected(3)));
     /// ```
-    pub fn try_send(&self, msg: T) -> Result<(), TrySendError<T>> {
+    pub fn try_send(&self, msg: T) -> Result<Option<[Duration;4]>, TrySendError<T>> {
         match &self.inner.flavor {
-            ChannelFlavor::Array(chan) => chan.try_send(msg),
+            ChannelFlavor::Array(chan) => chan.try_send(msg).and_then(|_| Ok(None)),
             ChannelFlavor::List(chan) => chan.try_send(msg),
-            ChannelFlavor::Zero(chan) => chan.try_send(msg),
+            ChannelFlavor::Zero(chan) => chan.try_send(msg).and_then(|_| Ok(None)),
         }
     }
 
@@ -410,11 +410,11 @@ impl<T> Sender<T> {
     /// assert_eq!(s.send(2), Ok(()));
     /// assert_eq!(s.send(3), Err(SendError(3)));
     /// ```
-    pub fn send(&self, msg: T) -> Result<(), SendError<T>> {
+    pub fn send(&self, msg: T) -> Result<Option<[Duration;4]>, SendError<T>> {
         match &self.inner.flavor {
-            ChannelFlavor::Array(chan) => chan.send(msg, None),
+            ChannelFlavor::Array(chan) => chan.send(msg, None).and_then(|_| Ok(None)),
             ChannelFlavor::List(chan) => chan.send(msg, None),
-            ChannelFlavor::Zero(chan) => chan.send(msg, None),
+            ChannelFlavor::Zero(chan) => chan.send(msg, None).and_then(|_| Ok(None)),
         }.map_err(|err| match err {
             SendTimeoutError::Disconnected(msg) => SendError(msg),
             SendTimeoutError::Timeout(_) => unreachable!(),
@@ -458,13 +458,13 @@ impl<T> Sender<T> {
     ///     Err(SendTimeoutError::Disconnected(3)),
     /// );
     /// ```
-    pub fn send_timeout(&self, msg: T, timeout: Duration) -> Result<(), SendTimeoutError<T>> {
+    pub fn send_timeout(&self, msg: T, timeout: Duration) -> Result<Option<[Duration;4]>, SendTimeoutError<T>> {
         let deadline = Instant::now() + timeout;
 
         match &self.inner.flavor {
-            ChannelFlavor::Array(chan) => chan.send(msg, Some(deadline)),
+            ChannelFlavor::Array(chan) => chan.send(msg, Some(deadline)).and_then(|_| Ok(None)),
             ChannelFlavor::List(chan) => chan.send(msg, Some(deadline)),
-            ChannelFlavor::Zero(chan) => chan.send(msg, Some(deadline)),
+            ChannelFlavor::Zero(chan) => chan.send(msg, Some(deadline)).and_then(|_| Ok(None)),
         }
     }
 
@@ -1371,11 +1371,11 @@ impl<T> SelectHandle for Receiver<T> {
 }
 
 /// Writes a message into the channel.
-pub unsafe fn write<T>(s: &Sender<T>, token: &mut Token, msg: T) -> Result<(), T> {
+pub unsafe fn write<T>(s: &Sender<T>, token: &mut Token, msg: T) -> Result<Option<[Duration;4]>, T> {
     match &s.inner.flavor {
-        ChannelFlavor::Array(chan) => chan.write(token, msg),
+        ChannelFlavor::Array(chan) => chan.write(token, msg).and_then(|_| Ok(None)),
         ChannelFlavor::List(chan) => chan.write(token, msg),
-        ChannelFlavor::Zero(chan) => chan.write(token, msg),
+        ChannelFlavor::Zero(chan) => chan.write(token, msg).and_then(|_| Ok(None)),
     }
 }
 

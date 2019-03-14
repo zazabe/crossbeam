@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::mem::{self, ManuallyDrop};
 use std::ptr;
 use std::sync::atomic::{self, AtomicPtr, AtomicUsize, Ordering};
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 use crossbeam_utils::CachePadded;
 
@@ -267,22 +267,33 @@ impl<T> Channel<T> {
     }
 
     /// Writes a message into the channel.
-    pub unsafe fn write(&self, token: &mut Token, msg: T) -> Result<(), T> {
+    pub unsafe fn write(&self, token: &mut Token, msg: T) -> Result<Option<[Duration;4]>, T> {
+        let start = Instant::now();
+
         // If there is no slot, the channel is disconnected.
         if token.list.block.is_null() {
             return Err(msg);
         }
+
+        let measure_list_block = start.elapsed();
 
         // Write the message into the slot.
         let block = token.list.block as *mut Block<T>;
         let offset = token.list.offset;
         let slot = (*block).slots.get_unchecked(offset);
         slot.msg.get().write(ManuallyDrop::new(msg));
+
+        let measure_slot_msg = start.elapsed() - measure_list_block;
+
         slot.state.fetch_or(WRITE, Ordering::Release);
+
+        let measure_slot_fetch = start.elapsed() - measure_slot_msg;
 
         // Wake a sleeping receiver.
         self.receivers.notify();
-        Ok(())
+
+        let measure_recv_notifiy = start.elapsed() - measure_slot_fetch;
+        Ok(Some([measure_list_block, measure_slot_msg, measure_slot_fetch, measure_recv_notifiy]))
     }
 
     /// Attempts to reserve a slot for receiving a message.
@@ -399,7 +410,7 @@ impl<T> Channel<T> {
     }
 
     /// Attempts to send a message into the channel.
-    pub fn try_send(&self, msg: T) -> Result<(), TrySendError<T>> {
+    pub fn try_send(&self, msg: T) -> Result<Option<[Duration;4]>, TrySendError<T>> {
         self.send(msg, None).map_err(|err| match err {
             SendTimeoutError::Disconnected(msg) => TrySendError::Disconnected(msg),
             SendTimeoutError::Timeout(_) => unreachable!(),
@@ -407,7 +418,7 @@ impl<T> Channel<T> {
     }
 
     /// Sends a message into the channel.
-    pub fn send(&self, msg: T, _deadline: Option<Instant>) -> Result<(), SendTimeoutError<T>> {
+    pub fn send(&self, msg: T, _deadline: Option<Instant>) -> Result<Option<[Duration;4]>, SendTimeoutError<T>> {
         let token = &mut Token::default();
         assert!(self.start_send(token));
         unsafe {

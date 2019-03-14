@@ -1007,7 +1007,7 @@ impl<'a> SelectedOperation<'a> {
     ///
     /// [`Sender`]: struct.Sender.html
     /// [`Select::send`]: struct.Select.html#method.send
-    pub fn send<T>(mut self, s: &Sender<T>, msg: T) -> Result<(), SendError<T>> {
+    pub fn send<T>(mut self, s: &Sender<T>, msg: T) -> Result<Option<[Duration;4]>, SendError<T>> {
         assert!(
             s as *const Sender<T> as *const u8 == self.ptr,
             "passed a sender that wasn't selected",
